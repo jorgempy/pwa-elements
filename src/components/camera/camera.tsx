@@ -26,7 +26,7 @@ export class CameraPWA {
 
   @State() photo: any;
   @State() photoSrc: any;
-  @State() showShutterOverlay = false;
+  @State() showShutterOverlay = true;
   @State() flashIndex = 0;
   @State() hasCamera: boolean | null = null;
   @State() rotation = 0;
@@ -57,7 +57,12 @@ export class CameraPWA {
   // Current flash mode
   flashMode: FlashMode = 'off';
 
+  timeout(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
   async componentDidLoad() {
+    this.showShutterOverlay = true;
     if (this.isServer) {
       return;
     }
@@ -72,6 +77,13 @@ export class CameraPWA {
     await this.queryDevices();
 
     // Initialize the camera
+    this.flashScreen(1000);
+
+    // setTimeout(() => {
+    //   this.initCamera()
+    // }, 100);
+
+    await this.timeout(350);
     await this.initCamera();
   }
 
@@ -160,7 +172,7 @@ export class CameraPWA {
         const photo = await this.imageCapture.takePhoto({
           fillLightMode: this.flashModes.length > 1 ? this.flashMode : undefined
         });
-        
+
         await this.flashScreen();
 
         this.promptAccept(photo);
@@ -200,7 +212,7 @@ export class CameraPWA {
           break;
       }
     }
-    
+
     this.photoSrc = URL.createObjectURL(photo);
   }
 
@@ -244,34 +256,38 @@ export class CameraPWA {
   }
 
   rotate() {
-    this.stopStream();
+    this.flashScreen(1500);
 
-    const track = this.stream && this.stream.getTracks()[0];
-    if (!track) {
-      return;
-    }
+    setTimeout(() => {
+      this.stopStream();
 
-    let c = track.getConstraints();
-    let facingMode = c.facingMode;
+      const track = this.stream && this.stream.getTracks()[0];
+      if (!track) {
+        return;
+      }
 
-    if (!facingMode) {
-      let c = track.getCapabilities();
-      facingMode = c.facingMode[0];
-    }
+      let c = track.getConstraints();
+      let facingMode = c.facingMode;
 
-    if (facingMode === 'environment') {
-      this.initCamera({
-        video: {
-          facingMode: 'user'
-        }
-      });
-    } else {
-      this.initCamera({
-        video: {
-          facingMode: 'environment'
-        }
-      });
-    }
+      if (!facingMode) {
+        let c = track.getCapabilities();
+        facingMode = c.facingMode[0];
+      }
+
+      if (facingMode === 'environment') {
+        this.initCamera({
+          video: {
+            facingMode: 'user'
+          }
+        });
+      } else {
+        this.initCamera({
+          video: {
+            facingMode: 'environment'
+          }
+        });
+      }
+    }, 150);
   }
 
   setFlashMode(mode: FlashMode) {
@@ -286,13 +302,13 @@ export class CameraPWA {
     }
   }
 
-  async flashScreen() {
+  async flashScreen(timeout: number = 100) {
     return new Promise((resolve, _reject) => {
       this.showShutterOverlay = true;
       setTimeout(() => {
         this.showShutterOverlay = false;
         resolve();
-      }, 100);
+      }, timeout);
     });
   }
 
@@ -317,19 +333,22 @@ export class CameraPWA {
   }
 
   handleCancelPhoto = (_e: Event) => {
-    const track = this.stream && this.stream.getTracks()[0];
-    let c = track && track.getConstraints();
-    this.photo = null;
+    this.flashScreen(700);
+    setTimeout(() => {
+        const track = this.stream && this.stream.getTracks()[0];
+        let c = track && track.getConstraints();
+        this.photo = null;
 
-    if (c) {
-      this.initCamera({
-        video: {
-          facingMode: c.facingMode
+        if (c) {
+          this.initCamera({
+            video: {
+              facingMode: c.facingMode
+            }
+          });
+        } else {
+          this.initCamera();
         }
-      });
-    } else {
-      this.initCamera();
-    }
+    }, 150)
   }
 
   handleAcceptPhoto = (_e: Event) => {
@@ -400,12 +419,10 @@ export class CameraPWA {
             <div class="item close" onClick={e => this.handleClose(e)}>
               <img src={this.iconExit()} />
             </div>
-            <div class="item flash" onClick={e => this.handleFlashClick(e)}>
+            <div class="item flash" >
               {this.flashModes.length > 0 && (
               <div>
-                {this.flashMode == 'off' ? <img src={this.iconFlashOff()} /> : ''}
-                {this.flashMode == 'auto' ? <img src={this.iconFlashAuto()} /> : ''}
-                {this.flashMode == 'flash' ? <img src={this.iconFlashOn()} /> : ''}
+                <img src={this.iconFlashOff()} />
               </div>
               )}
             </div>
@@ -443,7 +460,8 @@ export class CameraPWA {
             <div class="shutter-overlay">
             </div>
             )}
-            {this.hasImageCapture() ? (
+            {this.hasImageCapture() ?
+            (
             <video
               ref={(el: HTMLVideoElement) => this.videoElement = el}
               onLoadedMetaData={this.handleVideoMetadata}
